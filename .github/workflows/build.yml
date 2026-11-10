@@ -1,0 +1,74 @@
+name: Build HemaLens iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    name: Build iOS App & Package IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository into .swiftpm bundle
+        uses: actions/checkout@v4
+        with:
+          path: HemaLens.swiftpm
+
+      - name: Inspect Xcode environment
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Discover SwiftPM scheme
+        id: schemes
+        working-directory: HemaLens.swiftpm
+        run: |
+          xcodebuild -list || true
+          SCHEME=$(xcodebuild -list -json 2>/dev/null | python3 -c "import sys, json; data = json.load(sys.stdin); schemes = data.get('workspace', {}).get('schemes') or data.get('project', {}).get('schemes') or []; print(next((s for s in schemes if 'HemaLens' in s), schemes[0] if schemes else 'HemaLens'))" 2>/dev/null || echo "HemaLens")
+          echo "Detected scheme: $SCHEME"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+
+      - name: Build unsigned iOS .app bundle
+        working-directory: HemaLens.swiftpm
+        run: |
+          xcodebuild build \
+            -scheme "${{ steps.schemes.outputs.scheme }}" \
+            -destination "generic/platform=iOS" \
+            -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package .app into unsigned .ipa
+        run: |
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products" -type d -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Compiled .app bundle not found in DerivedData!"
+            find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 4 || true
+            exit 1
+          fi
+          echo "Found app bundle at: $APP_PATH"
+
+          mkdir -p "$RUNNER_TEMP/ipa_build/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa_build/Payload/"
+
+          cd "$RUNNER_TEMP/ipa_build"
+          zip -r "$GITHUB_WORKSPACE/HemaLens.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/HemaLens.ipa"
+
+      - name: Upload HemaLens.ipa as GitHub Actions Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HemaLens-iOS-IPA
+          path: HemaLens.ipa
+          if-no-files-found: error
+          retention-days: 30

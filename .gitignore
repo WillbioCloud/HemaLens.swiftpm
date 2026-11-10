@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Swift Package Manager & Xcode
+.build/
+.swiftpm/
+DerivedData/
+build/
+*.ipa
+*.xcarchive
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+
+# Editors
+.vscode/
+.idea/
