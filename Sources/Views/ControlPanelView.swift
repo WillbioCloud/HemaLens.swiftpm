@@ -184,7 +184,7 @@ struct ControlPanelView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .background(isSelected ? Color.cyan.opacity(0.35) : Color.white.opacity(0.08))
-                                .foregroundStyle(isSelected ? .white : .secondary)
+                                .foregroundStyle(isSelected ? Color.white : Color.secondary)
                                 .clipShape(Capsule())
                                 .overlay(
                                     Capsule()
@@ -316,7 +316,7 @@ struct ControlPanelView: View {
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .background(isSelected ? Color.white.opacity(0.25) : Color.white.opacity(0.1))
-                                .foregroundStyle(isSelected ? .white : .secondary)
+                                .foregroundStyle(isSelected ? Color.white : Color.secondary)
                                 .clipShape(Capsule())
                             
                             VStack(alignment: .leading, spacing: 2) {

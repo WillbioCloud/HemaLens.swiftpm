@@ -285,3 +285,4 @@ struct DailyIntakeEntry: Identifiable, Equatable {
         return false
     }
 }
+

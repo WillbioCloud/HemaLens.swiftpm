@@ -251,7 +251,7 @@ struct MainLabView: View {
                         ? (mode == .microVein ? Color.red.opacity(0.75) : Color.cyan.opacity(0.75))
                         : Color.clear
                     )
-                    .foregroundStyle(isSelected ? .white : .secondary)
+                    .foregroundStyle(isSelected ? Color.white : Color.secondary)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)

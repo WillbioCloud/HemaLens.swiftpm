@@ -168,7 +168,7 @@ struct UserProfileHealthView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(isSelected ? profile.accentColor : Color.white.opacity(0.14))
-                                .foregroundStyle(isSelected ? .black : .white)
+                                .foregroundStyle(isSelected ? Color.black : Color.white)
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -383,3 +383,4 @@ struct UserProfileHealthView: View {
         viewModel.applyPersonalBloodExam(rbc: rbc, wbc: wbc, plt: plt, glucose: glu)
     }
 }
+

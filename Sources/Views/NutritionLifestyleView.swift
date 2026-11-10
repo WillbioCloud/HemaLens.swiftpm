@@ -145,86 +145,92 @@ struct NutritionLifestyleView: View {
                 .padding(.top, 4)
             
             ForEach(FoodHabitItem.catalog) { item in
-                let count = viewModel.dailyIntake[item.id] ?? 0
-                let totalQty = Double(count) * item.defaultStepAmount
-                let exceeds = item.category == .bloodVillains && totalQty > item.safeDailyLimit && count > 0
-                
-                HStack(spacing: 12) {
-                    Image(systemName: item.iconName)
-                        .font(.headline)
-                        .foregroundStyle(item.category.color)
-                        .frame(width: 38, height: 38)
-                        .background(item.category.color.opacity(0.16))
-                        .clipShape(Circle())
-                    
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text(item.name)
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.primary)
-                            
-                            if exceeds {
-                                Text("OVER LIMIT")
-                                    .font(.system(size: 9, weight: .heavy))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.red.opacity(0.28))
-                                    .foregroundStyle(.red)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        
-                        Text("\(item.unitLabel) • \(item.limitDescription)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        
-                        if count > 0 {
-                            Text("Logged: \(Int(totalQty)) (\(count)x)")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(exceeds ? .red : item.category.color)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    HStack(spacing: 10) {
-                        Button {
-                            withAnimation(.spring(response: 0.25)) {
-                                viewModel.removeIntakeServing(for: item)
-                            }
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(count > 0 ? .secondary : .secondary.opacity(0.3))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(count == 0)
-                        
-                        Text("\(count)")
-                            .font(.subheadline.weight(.heavy).monospacedDigit())
-                            .frame(minWidth: 20)
-                        
-                        Button {
-                            withAnimation(.spring(response: 0.25)) {
-                                viewModel.addIntakeServing(for: item)
-                            }
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(item.category.color)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(12)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(exceeds ? Color.red.opacity(0.5) : Color.white.opacity(0.08), lineWidth: 1)
-                )
+                trackerItemRow(item: item)
             }
         }
+    }
+    
+    @ViewBuilder
+    private func trackerItemRow(item: FoodHabitItem) -> some View {
+        let count = viewModel.dailyIntake[item.id] ?? 0
+        let totalQty = Double(count) * item.defaultStepAmount
+        let exceeds = item.category == .bloodVillains && totalQty > item.safeDailyLimit && count > 0
+        
+        HStack(spacing: 12) {
+            Image(systemName: item.iconName)
+                .font(.headline)
+                .foregroundStyle(item.category.color)
+                .frame(width: 38, height: 38)
+                .background(item.category.color.opacity(0.16))
+                .clipShape(Circle())
+            
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    
+                    if exceeds {
+                        Text("OVER LIMIT")
+                            .font(.system(size: 9, weight: .heavy))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.28))
+                            .foregroundStyle(.red)
+                            .clipShape(Capsule())
+                    }
+                }
+                
+                Text("\(item.unitLabel) • \(item.limitDescription)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                
+                if count > 0 {
+                    Text("Logged: \(Int(totalQty)) (\(count)x)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(exceeds ? Color.red : item.category.color)
+                }
+            }
+            
+            Spacer()
+            
+            HStack(spacing: 10) {
+                Button {
+                    withAnimation(.spring(response: 0.25)) {
+                        viewModel.removeIntakeServing(for: item)
+                    }
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.secondary)
+                        .opacity(count > 0 ? 1.0 : 0.3)
+                }
+                .buttonStyle(.plain)
+                .disabled(count == 0)
+                
+                Text("\(count)")
+                    .font(.subheadline.weight(.heavy).monospacedDigit())
+                    .frame(minWidth: 20)
+                
+                Button {
+                    withAnimation(.spring(response: 0.25)) {
+                        viewModel.addIntakeServing(for: item)
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(item.category.color)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(exceeds ? Color.red.opacity(0.5) : Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
     
     // MARK: - 2. Sugar & Sedentary Timeline
@@ -383,3 +389,4 @@ struct NutritionLifestyleView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
+
