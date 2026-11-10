@@ -62,7 +62,6 @@ struct BloodVesselSceneViewRepresentable: UIViewRepresentable {
         context.coordinator.sceneController.update(with: viewModel)
     }
     
-    @MainActor
     class Coordinator: NSObject {
         let sceneController: VesselSceneController
         weak var scnView: SCNView?
@@ -72,6 +71,7 @@ struct BloodVesselSceneViewRepresentable: UIViewRepresentable {
             self.sceneController = sceneController
         }
         
+        @MainActor
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let scnView = scnView, let viewModel = viewModel else { return }
             let point = gesture.location(in: scnView)
@@ -147,7 +147,6 @@ struct BloodVesselSceneViewRepresentableMac: NSViewRepresentable {
         context.coordinator.sceneController.update(with: viewModel)
     }
     
-    @MainActor
     class Coordinator: NSObject {
         let sceneController: VesselSceneController
         weak var scnView: SCNView?
@@ -157,6 +156,7 @@ struct BloodVesselSceneViewRepresentableMac: NSViewRepresentable {
             self.sceneController = sceneController
         }
         
+        @MainActor
         @objc func handleClick(_ gesture: NSClickGestureRecognizer) {
             guard let scnView = scnView, let viewModel = viewModel else { return }
             let point = gesture.location(in: scnView)
