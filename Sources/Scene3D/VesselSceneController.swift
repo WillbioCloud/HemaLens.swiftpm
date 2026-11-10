@@ -5,9 +5,11 @@ import CoreGraphics
 #if canImport(UIKit)
 import UIKit
 typealias PlatformColor = UIColor
+typealias PlatformImage = UIImage
 #elseif canImport(AppKit)
 import AppKit
 typealias PlatformColor = NSColor
+typealias PlatformImage = NSImage
 #endif
 
 // MARK: - Vessel Scene Controller
@@ -30,11 +32,13 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
     private let maxRBC = 80
     private let maxWBC = 28
     private let maxPLT = 60
+    private let maxGlucose = 48
     private let maxFibrinStrands = 18
     
     private var rbcNodes: [SCNNode] = []
     private var wbcNodes: [SCNNode] = []
     private var pltNodes: [SCNNode] = []
+    private var glucoseNodes: [SCNNode] = []
     private var fibrinNodes: [SCNNode] = []
     
     // MARK: - Dynamic Per-Cell Flow Metadata
@@ -50,14 +54,17 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
     private var rbcDynamics: [CellDynamics] = []
     private var wbcDynamics: [CellDynamics] = []
     private var pltDynamics: [CellDynamics] = []
+    private var glucoseDynamics: [CellDynamics] = []
     
     // MARK: - Thread-Safe Simulation Snapshot
     private struct SimulationSnapshot: Equatable {
         var rbcNodeCount: Int = 45
         var wbcNodeCount: Int = 8
         var pltNodeCount: Int = 26
+        var glucoseNodeCount: Int = 0
         var speedMultiplier: Float = 1.0
         var oxygenationFactor: Float = 1.0
+        var hyperglycemiaIntensity: Float = 0.0
         var isImmuneResponseActive: Bool = false
         var cytokineIntensity: Float = 0.0
         var isClottingActive: Bool = false
@@ -85,6 +92,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
     private var rbcMaterial = SCNMaterial()
     private var wbcMaterial = SCNMaterial()
     private var pltMaterial = SCNMaterial()
+    private var glucoseMaterial = SCNMaterial()
     private var vesselMaterial = SCNMaterial()
     private var fibrinMaterial = SCNMaterial()
     
@@ -119,11 +127,9 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
         
-        // Deep vascular crimson base
         ctx.setFillColor(red: 0.45, green: 0.05, blue: 0.09, alpha: 0.92)
         ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
         
-        // Organic endothelial muscle striations and subtle depth rings
         for i in 0..<24 {
             let y = CGFloat(i) * (CGFloat(size) / 24.0)
             let shade = CGFloat(0.04 + Double((i % 3)) * 0.025)
@@ -131,7 +137,6 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             ctx.fill(CGRect(x: 0, y: y, width: CGFloat(size), height: 4.0))
         }
         
-        // Subtle microvascular cellular highlights
         for _ in 0..<45 {
             let x = CGFloat.random(in: 0..<CGFloat(size))
             let y = CGFloat.random(in: 0..<CGFloat(size))
@@ -160,7 +165,6 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         ctx.setFillColor(red: 0.5, green: 0.5, blue: 1.0, alpha: 1.0)
         ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
         
-        // Microvilli surface bumps for leukocyte membrane texture
         for _ in 0..<180 {
             let x = CGFloat.random(in: 0..<CGFloat(size))
             let y = CGFloat.random(in: 0..<CGFloat(size))
@@ -168,6 +172,46 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             ctx.setFillColor(red: 0.72, green: 0.72, blue: 1.0, alpha: 0.7)
             ctx.fillEllipse(in: CGRect(x: x, y: y, width: r, height: r))
         }
+        
+        return ctx.makeImage()
+    }
+    
+    /// Creates a soft radial circle particle image so SCNParticleSystem renders glowing orbs instead of white squares.
+    private func createSoftCircleParticleImage() -> CGImage? {
+        let size = 64
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data: nil,
+            width: size,
+            height: size,
+            bitsPerComponent: 8,
+            bytesPerRow: size * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        
+        ctx.clear(CGRect(x: 0, y: 0, width: size, height: size))
+        
+        let colors = [
+            CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+            CGColor(red: 0.55, green: 0.92, blue: 1.0, alpha: 0.55),
+            CGColor(red: 0.25, green: 0.85, blue: 1.0, alpha: 0.0)
+        ] as CFArray
+        let locations: [CGFloat] = [0.0, 0.42, 1.0]
+        
+        guard let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: locations) else {
+            return nil
+        }
+        
+        let center = CGPoint(x: CGFloat(size) * 0.5, y: CGFloat(size) * 0.5)
+        ctx.drawRadialGradient(
+            gradient,
+            startCenter: center,
+            startRadius: 0.0,
+            endCenter: center,
+            endRadius: CGFloat(size) * 0.5,
+            options: .drawsAfterEndLocation
+        )
         
         return ctx.makeImage()
     }
@@ -189,11 +233,19 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         wbcMaterial.roughness.contents = 0.35
         wbcMaterial.metalness.contents = 0.08
         
-        // PLT: Golden discoid fragments
+        // PLT: Deeper warm amber-gold biconvex fragments (high roughness avoids white specular blowout)
         pltMaterial.lightingModel = .physicallyBased
-        pltMaterial.diffuse.contents = PlatformColor(red: 0.98, green: 0.82, blue: 0.35, alpha: 1.0)
-        pltMaterial.roughness.contents = 0.28
-        pltMaterial.metalness.contents = 0.25
+        pltMaterial.diffuse.contents = PlatformColor(red: 0.88, green: 0.62, blue: 0.12, alpha: 1.0)
+        pltMaterial.roughness.contents = 0.55
+        pltMaterial.metalness.contents = 0.05
+        
+        // Glucose Crystals: Translucent frosty-white sugar molecules in plasma
+        glucoseMaterial.lightingModel = .physicallyBased
+        glucoseMaterial.diffuse.contents = PlatformColor(red: 0.92, green: 0.98, blue: 1.0, alpha: 0.62)
+        glucoseMaterial.emission.contents = PlatformColor(red: 0.18, green: 0.28, blue: 0.26, alpha: 1.0)
+        glucoseMaterial.roughness.contents = 0.22
+        glucoseMaterial.metalness.contents = 0.10
+        glucoseMaterial.transparencyMode = .dualLayer
         
         // Endothelial Wall: Translucent striated vascular tunnel
         vesselMaterial.lightingModel = .physicallyBased
@@ -205,10 +257,11 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         } else {
             vesselMaterial.diffuse.contents = PlatformColor(red: 0.52, green: 0.07, blue: 0.11, alpha: 0.90)
         }
+        vesselMaterial.multiply.contents = PlatformColor.white
         vesselMaterial.roughness.contents = 0.52
         vesselMaterial.metalness.contents = 0.05
         vesselMaterial.isDoubleSided = true
-        vesselMaterial.cullMode = .front // Camera inside sees the inner walls
+        vesselMaterial.cullMode = .front
         
         // Fibrin Strands: Amber-white protein mesh
         fibrinMaterial.lightingModel = .physicallyBased
@@ -235,14 +288,14 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         let ambientLight = SCNLight()
         ambientLight.type = .ambient
         ambientLight.color = PlatformColor(red: 0.45, green: 0.10, blue: 0.12, alpha: 1.0)
-        ambientLight.intensity = 580.0
+        ambientLight.intensity = 520.0
         ambientLightNode.light = ambientLight
         scene.rootNode.addChildNode(ambientLightNode)
         
         let directionalLight = SCNLight()
         directionalLight.type = .directional
         directionalLight.color = PlatformColor(red: 1.0, green: 0.92, blue: 0.90, alpha: 1.0)
-        directionalLight.intensity = 920.0
+        directionalLight.intensity = 780.0
         directionalLightNode.light = directionalLight
         directionalLightNode.position = SCNVector3(x: 2.0, y: 4.0, z: 8.0)
         directionalLightNode.eulerAngles = SCNVector3(x: -Float.pi / 4, y: Float.pi / 6, z: 0.0)
@@ -251,7 +304,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         let pointLight = SCNLight()
         pointLight.type = .omni
         pointLight.color = PlatformColor(red: 0.95, green: 0.25, blue: 0.20, alpha: 1.0)
-        pointLight.intensity = 720.0
+        pointLight.intensity = 650.0
         pointLight.attenuationStartDistance = 2.0
         pointLight.attenuationEndDistance = 22.0
         pointLightNode.light = pointLight
@@ -275,7 +328,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
     
     // MARK: - Object Pools (Zero Allocation in Frame Loop)
     private func setupObjectPools() {
-        // 1. Erythrocytes (RBC) Pool: True biconcave disc (Outer torus rim + sunken inner bridge)
+        // 1. Erythrocytes (RBC) Pool: True biconcave disc
         let rbcRimGeometry = SCNTorus(ringRadius: 0.24, pipeRadius: 0.145)
         rbcRimGeometry.ringSegmentCount = 24
         rbcRimGeometry.pipeSegmentCount = 12
@@ -360,13 +413,15 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             ))
         }
         
-        // 3. Platelets (PLT) Pool: Minute golden discoid fragments
-        let pltGeometry = SCNBox(width: 0.22, height: 0.08, length: 0.22, chamferRadius: 0.04)
+        // 3. Platelets (PLT) Pool: Organic flattened biconvex spheres (Fixes white box blowout)
+        let pltGeometry = SCNSphere(radius: 0.14)
+        pltGeometry.segmentCount = 16
         pltGeometry.materials = [pltMaterial]
         
         for i in 0..<maxPLT {
             let node = SCNNode(geometry: pltGeometry)
             node.name = "PLT"
+            node.scale = SCNVector3(x: 1.0, y: 0.35, z: 0.85)
             
             let r = Float.random(in: 0.4...2.8)
             let theta = Float.random(in: 0...(Float.pi * 2))
@@ -382,12 +437,55 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
                 angle: theta,
                 axialZ: z,
                 spinSpeed: SCNVector3(
-                    x: Float.random(in: -2.6...2.6),
-                    y: Float.random(in: -2.1...2.1),
-                    z: Float.random(in: -2.3...2.3)
+                    x: Float.random(in: -2.4...2.4),
+                    y: Float.random(in: -1.9...1.9),
+                    z: Float.random(in: -2.1...2.1)
                 ),
                 orbitalSpeed: Float.random(in: -0.4...0.4),
                 flowSpeedBias: Float.random(in: 0.95...1.20)
+            ))
+        }
+        
+        // 4. Glucose Crystal Pool: Translucent bipyramid sugar crystals in plasma
+        let topPyramid = SCNPyramid(width: 0.12, height: 0.10, length: 0.12)
+        topPyramid.materials = [glucoseMaterial]
+        let bottomPyramid = SCNPyramid(width: 0.12, height: 0.10, length: 0.12)
+        bottomPyramid.materials = [glucoseMaterial]
+        
+        for i in 0..<maxGlucose {
+            let crystalParent = SCNNode()
+            crystalParent.name = "GLU"
+            
+            let topNode = SCNNode(geometry: topPyramid)
+            topNode.name = "GLU"
+            
+            let bottomNode = SCNNode(geometry: bottomPyramid)
+            bottomNode.name = "GLU"
+            bottomNode.eulerAngles = SCNVector3(x: Float.pi, y: 0.0, z: 0.0)
+            
+            crystalParent.addChildNode(topNode)
+            crystalParent.addChildNode(bottomNode)
+            
+            let r = Float.random(in: 0.15...2.85)
+            let theta = Float.random(in: 0...(Float.pi * 2))
+            let z = spawnZ + (Float(i) / Float(maxGlucose)) * (despawnZ - spawnZ)
+            
+            crystalParent.position = SCNVector3(x: r * cos(theta), y: r * sin(theta), z: z)
+            crystalParent.isHidden = i >= appliedSnapshot.glucoseNodeCount
+            scene.rootNode.addChildNode(crystalParent)
+            glucoseNodes.append(crystalParent)
+            
+            glucoseDynamics.append(CellDynamics(
+                radius: r,
+                angle: theta,
+                axialZ: z,
+                spinSpeed: SCNVector3(
+                    x: Float.random(in: -1.8...1.8),
+                    y: Float.random(in: -2.2...2.2),
+                    z: Float.random(in: -1.5...1.5)
+                ),
+                orbitalSpeed: Float.random(in: -0.35...0.35),
+                flowSpeedBias: Float.random(in: 0.78...1.05)
             ))
         }
     }
@@ -407,18 +505,26 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         }
     }
     
-    // MARK: - Procedural Cytokine Emitter
+    // MARK: - Procedural Cytokine Emitter (Soft Radial Circle Texture)
     private func setupCytokineEmitter() {
         let particles = SCNParticleSystem()
         particles.birthRate = 0.0
-        particles.particleLifeSpan = 1.3
-        particles.particleSize = 0.075
-        particles.particleColor = PlatformColor(red: 0.25, green: 0.85, blue: 1.0, alpha: 0.85)
+        particles.particleLifeSpan = 1.4
+        particles.particleSize = 0.14
+        particles.particleColor = PlatformColor(red: 0.35, green: 0.88, blue: 1.0, alpha: 0.85)
         particles.blendMode = .additive
         particles.emitterShape = SCNSphere(radius: 1.9)
         particles.spreadingAngle = 180.0
-        particles.speedFactor = 1.25
-        particles.acceleration = SCNVector3(x: 0.0, y: 0.0, z: 2.2)
+        particles.speedFactor = 1.15
+        particles.acceleration = SCNVector3(x: 0.0, y: 0.0, z: 2.0)
+        
+        if let cgCircle = createSoftCircleParticleImage() {
+            #if canImport(UIKit)
+            particles.particleImage = PlatformImage(cgImage: cgCircle)
+            #elseif canImport(AppKit)
+            particles.particleImage = PlatformImage(cgImage: cgCircle, size: NSSize(width: 64, height: 64))
+            #endif
+        }
         
         cytokineEmitterNode.position = SCNVector3(x: 0.0, y: 0.0, z: -2.0)
         cytokineEmitterNode.addParticleSystem(particles)
@@ -432,8 +538,10 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             rbcNodeCount: Swift.min(maxRBC, viewModel.targetRBCNodeCount),
             wbcNodeCount: Swift.min(maxWBC, viewModel.targetWBCNodeCount),
             pltNodeCount: Swift.min(maxPLT, viewModel.targetPLTNodeCount),
+            glucoseNodeCount: Swift.min(maxGlucose, viewModel.targetGlucoseNodeCount),
             speedMultiplier: viewModel.bloodFlowSpeedMultiplier,
             oxygenationFactor: viewModel.oxygenationGlowFactor,
+            hyperglycemiaIntensity: viewModel.hyperglycemiaIntensity,
             isImmuneResponseActive: viewModel.isImmuneResponseActive,
             cytokineIntensity: viewModel.cytokineParticleIntensity,
             isClottingActive: viewModel.isClottingRiskActive,
@@ -464,7 +572,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         guard needsApply else { return appliedSnapshot }
         appliedSnapshot = snapshot
         
-        // 1. Update cell visibility
+        // 1. Update cell & crystal visibility
         for i in 0..<maxRBC {
             rbcNodes[i].isHidden = i >= snapshot.rbcNodeCount
         }
@@ -473,6 +581,9 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         }
         for i in 0..<maxPLT {
             pltNodes[i].isHidden = i >= snapshot.pltNodeCount
+        }
+        for i in 0..<maxGlucose {
+            glucoseNodes[i].isHidden = i >= snapshot.glucoseNodeCount
         }
         
         // 2. Oxygenation lumen color modulation
@@ -494,7 +605,16 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             alpha: 1.0
         )
         
-        // 3. Highlight selected cell lineage if inspected
+        // 3. Endothelial glycation / oxidative stress darkening during hyperglycemia
+        let glycationDarken = CGFloat(1.0 - (0.58 * snapshot.hyperglycemiaIntensity))
+        vesselMaterial.multiply.contents = PlatformColor(
+            red: glycationDarken,
+            green: glycationDarken * 0.85,
+            blue: glycationDarken * 0.85,
+            alpha: 1.0
+        )
+        
+        // 4. Highlight selected lineage if inspected
         rbcMaterial.emission.contents = snapshot.selectedCellType == .erythrocytes
             ? PlatformColor(red: 0.38, green: 0.05, blue: 0.05, alpha: 1.0)
             : PlatformColor.black
@@ -504,17 +624,21 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             : PlatformColor(red: 0.14, green: 0.24, blue: 0.42, alpha: 1.0)
             
         pltMaterial.emission.contents = snapshot.selectedCellType == .platelets
-            ? PlatformColor(red: 0.55, green: 0.40, blue: 0.05, alpha: 1.0)
+            ? PlatformColor(red: 0.45, green: 0.30, blue: 0.04, alpha: 1.0)
             : PlatformColor.black
+            
+        glucoseMaterial.emission.contents = snapshot.selectedCellType == .glucose
+            ? PlatformColor(red: 0.30, green: 0.65, blue: 0.55, alpha: 1.0)
+            : PlatformColor(red: 0.18, green: 0.28, blue: 0.26, alpha: 1.0)
         
-        // 4. Cytokine emitter intensity
+        // 5. Cytokine emitter intensity
         if let emitter = cytokineEmitterNode.particleSystems?.first {
             emitter.birthRate = snapshot.isImmuneResponseActive
                 ? CGFloat(45.0 * snapshot.cytokineIntensity + 12.0)
                 : 0.0
         }
         
-        // 5. Hide fibrin strands if clotting is inactive
+        // 6. Hide fibrin strands if clotting is inactive
         if !snapshot.isClottingActive {
             for strand in fibrinNodes {
                 strand.isHidden = true
@@ -538,7 +662,6 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         
         guard delta > 0.0, delta < 0.2, !state.isPaused else { return }
         
-        // Smoothly interpolate flow velocity
         currentSpeedMultiplier += (state.speedMultiplier - currentSpeedMultiplier) * Swift.min(1.0, delta * 3.5)
         let baseVelocity: Float = 6.2 * currentSpeedMultiplier
         
@@ -555,12 +678,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             }
             
             dyn.angle += dyn.orbitalSpeed * delta
-            node.position = SCNVector3(
-                x: dyn.radius * cos(dyn.angle),
-                y: dyn.radius * sin(dyn.angle),
-                z: dyn.axialZ
-            )
-            
+            node.position = SCNVector3(x: dyn.radius * cos(dyn.angle), y: dyn.radius * sin(dyn.angle), z: dyn.axialZ)
             node.eulerAngles.x += dyn.spinSpeed.x * delta
             node.eulerAngles.y += dyn.spinSpeed.y * delta
             node.eulerAngles.z += dyn.spinSpeed.z * delta
@@ -580,12 +698,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             }
             
             dyn.angle += dyn.orbitalSpeed * delta
-            node.position = SCNVector3(
-                x: dyn.radius * cos(dyn.angle),
-                y: dyn.radius * sin(dyn.angle),
-                z: dyn.axialZ
-            )
-            
+            node.position = SCNVector3(x: dyn.radius * cos(dyn.angle), y: dyn.radius * sin(dyn.angle), z: dyn.axialZ)
             node.eulerAngles.x += dyn.spinSpeed.x * delta
             node.eulerAngles.y += dyn.spinSpeed.y * delta
             
@@ -597,7 +710,6 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             var dyn = pltDynamics[i]
             let node = pltNodes[i]
             
-            // In clotting state, platelets gravitate radially toward aggregates
             if state.isClottingActive && i > 3 {
                 let leadDyn = pltDynamics[i % 4]
                 dyn.radius += (leadDyn.radius - dyn.radius) * delta * 0.85
@@ -611,12 +723,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             }
             
             dyn.angle += dyn.orbitalSpeed * delta
-            node.position = SCNVector3(
-                x: dyn.radius * cos(dyn.angle),
-                y: dyn.radius * sin(dyn.angle),
-                z: dyn.axialZ
-            )
-            
+            node.position = SCNVector3(x: dyn.radius * cos(dyn.angle), y: dyn.radius * sin(dyn.angle), z: dyn.axialZ)
             node.eulerAngles.x += dyn.spinSpeed.x * delta
             node.eulerAngles.y += dyn.spinSpeed.y * delta
             node.eulerAngles.z += dyn.spinSpeed.z * delta
@@ -624,7 +731,28 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             pltDynamics[i] = dyn
         }
         
-        // 4. Update Oriented Fibrin Strands bridging close platelets
+        // 4. Animate Glucose Crystals (Hyperglycemia > 140 mg/dL)
+        for i in 0..<state.glucoseNodeCount {
+            var dyn = glucoseDynamics[i]
+            let node = glucoseNodes[i]
+            
+            dyn.axialZ += baseVelocity * dyn.flowSpeedBias * delta
+            if dyn.axialZ > despawnZ {
+                dyn.axialZ = spawnZ + Float.random(in: 0.0...1.8)
+                dyn.angle = Float.random(in: 0...(Float.pi * 2))
+                dyn.radius = Float.random(in: 0.15...2.85)
+            }
+            
+            dyn.angle += dyn.orbitalSpeed * delta
+            node.position = SCNVector3(x: dyn.radius * cos(dyn.angle), y: dyn.radius * sin(dyn.angle), z: dyn.axialZ)
+            node.eulerAngles.x += dyn.spinSpeed.x * delta
+            node.eulerAngles.y += dyn.spinSpeed.y * delta
+            node.eulerAngles.z += dyn.spinSpeed.z * delta
+            
+            glucoseDynamics[i] = dyn
+        }
+        
+        // 5. Update Oriented Fibrin Strands bridging close platelets
         if state.isClottingActive && state.pltNodeCount >= 3 {
             let activeStrands = Int(Float(maxFibrinStrands) * state.fibrinIntensity)
             for s in 0..<maxFibrinStrands {
@@ -644,7 +772,6 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
                 let dz = pos2.z - pos1.z
                 let dist = sqrt(dx * dx + dy * dy + dz * dz)
                 
-                // Only render fibrin bridge when platelets are physically close
                 guard dist > 0.08 && dist < 3.6 else {
                     strandNode.isHidden = true
                     continue
@@ -665,7 +792,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
             }
         }
         
-        // 5. Physiological Arterial Pulse Oscillation
+        // 6. Physiological Arterial Pulse Oscillation
         let pulseFreq = Float(state.heartRateBPM) / 60.0 * Float.pi * 2.0
         let pulseAmplitude: Float = 0.042
         let pulseOffset = sin(Float(time) * pulseFreq) * pulseAmplitude

@@ -49,11 +49,12 @@ enum ParameterStatus: Equatable {
     }
 }
 
-// MARK: - Blood Cell Type
+// MARK: - Blood Cell & Biomarker Type
 enum BloodCellType: String, CaseIterable, Identifiable {
     case erythrocytes = "Red Blood Cells (RBC)"
     case leukocytes = "White Blood Cells (WBC)"
     case platelets = "Platelets (PLT)"
+    case glucose = "Blood Glucose (Glycemia)"
     
     var id: String { rawValue }
     
@@ -62,6 +63,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return "RBC"
         case .leukocytes: return "WBC"
         case .platelets: return "PLT"
+        case .glucose: return "Glucose"
         }
     }
     
@@ -70,6 +72,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return "Red Blood Cells"
         case .leukocytes: return "White Blood Cells"
         case .platelets: return "Platelets"
+        case .glucose: return "Blood Glucose"
         }
     }
     
@@ -78,6 +81,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return "Erythrocytes"
         case .leukocytes: return "Leukocytes"
         case .platelets: return "Thrombocytes"
+        case .glucose: return "Glycemia"
         }
     }
     
@@ -86,6 +90,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return "million/µL"
         case .leukocytes: return "/µL"
         case .platelets: return "/µL"
+        case .glucose: return "mg/dL"
         }
     }
     
@@ -94,15 +99,26 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return "drop.fill"
         case .leukocytes: return "shield.lefthalf.filled"
         case .platelets: return "bandage.fill"
+        case .glucose: return "cube.fill"
         }
     }
     
-    // MARK: - Sliders & Ranges (Section 4.1 SDD)
+    var themeColor: Color {
+        switch self {
+        case .erythrocytes: return .red
+        case .leukocytes: return .cyan
+        case .platelets: return .yellow
+        case .glucose: return .mint
+        }
+    }
+    
+    // MARK: - Sliders & Reference Ranges
     var minRange: Double {
         switch self {
         case .erythrocytes: return 2.0
         case .leukocytes: return 1000.0
         case .platelets: return 50000.0
+        case .glucose: return 50.0
         }
     }
     
@@ -111,6 +127,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return 7.0
         case .leukocytes: return 25000.0
         case .platelets: return 600000.0
+        case .glucose: return 350.0
         }
     }
     
@@ -119,6 +136,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return 0.1
         case .leukocytes: return 500.0
         case .platelets: return 10000.0
+        case .glucose: return 5.0
         }
     }
     
@@ -127,6 +145,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return 5.0
         case .leukocytes: return 7500.0
         case .platelets: return 280000.0
+        case .glucose: return 88.0
         }
     }
     
@@ -135,15 +154,16 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return 4.5...5.9
         case .leukocytes: return 4500.0...11000.0
         case .platelets: return 150000.0...450000.0
+        case .glucose: return 70.0...99.0
         }
     }
     
-    // Critical diagnosis thresholds defined in Section 4.2 of SDD
     var criticalLowThreshold: Double {
         switch self {
         case .erythrocytes: return 4.0
         case .leukocytes: return 4000.0
         case .platelets: return 140000.0
+        case .glucose: return 65.0
         }
     }
     
@@ -152,6 +172,7 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes: return 6.0
         case .leukocytes: return 12000.0
         case .platelets: return 450000.0
+        case .glucose: return 140.0
         }
     }
     
@@ -174,14 +195,12 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         switch self {
         case .erythrocytes:
             return String(format: "%.1f", value)
-        case .leukocytes:
+        case .leukocytes, .platelets:
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal
             return formatter.string(from: NSNumber(value: Int(value))) ?? "\(Int(value))"
-        case .platelets:
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .decimal
-            return formatter.string(from: NSNumber(value: Int(value))) ?? "\(Int(value))"
+        case .glucose:
+            return "\(Int(value.rounded()))"
         }
     }
     
@@ -199,6 +218,8 @@ enum BloodCellType: String, CaseIterable, Identifiable {
             return "Active immune surveillance, phagocytosis of pathogens, and cytokine-mediated defense against infections."
         case .platelets:
             return "Primary hemostasis: adheres to vascular subendothelial collagen to form a plug and initiate coagulation."
+        case .glucose:
+            return "Primary cellular fuel powering brain neurons, red blood cells, and skeletal muscles via ATP synthesis."
         }
     }
     
@@ -207,9 +228,11 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes:
             return "Biconcave red discs dynamically tumbling in the laminar stream. Their concentration dictates plasma color and vessel luminosity."
         case .leukocytes:
-            return "Larger, granular white-bluish spheres slowly rolling along the endothelial wall. During active infection, they release bright cytokine particles."
+            return "Larger, granular white-bluish spheres slowly rolling along the endothelial wall. During active infection, they release glowing radial cytokine particles."
         case .platelets:
-            return "Minute golden discoid fragments. When triggered by high counts, they aggregate into dense clusters and weave fibrin thread networks."
+            return "Organic golden biconvex cellular fragments. When triggered by high counts, they aggregate into dense clusters and weave fibrin thread networks."
+        case .glucose:
+            return "Translucent crystalline molecules suspended in plasma. Above 140 mg/dL, crystals accumulate, flow becomes sluggish, and vessel walls darken from glycation stress."
         }
     }
     
@@ -218,9 +241,11 @@ enum BloodCellType: String, CaseIterable, Identifiable {
         case .erythrocytes:
             return "Hypoxia, tissue oxygen debt, extreme fatigue, tachycardia, and visible pallor in the bloodstream."
         case .leukocytes:
-            return "Severe immunosuppression (neutropenia), making the body helpless against opportunistic bacterial and viral infections."
+            return "Severe immunosuppression (neutropenia), making the body vulnerable to opportunistic bacterial and viral infections."
         case .platelets:
             return "Impaired primary hemostasis, prolonged bleeding time, spontaneous petechiae, and hemorrhagic risks."
+        case .glucose:
+            return "Neuroglycopenia: acute cerebral energy starvation causing shakiness, sweating, confusion, and fainting."
         }
     }
     
@@ -232,6 +257,8 @@ enum BloodCellType: String, CaseIterable, Identifiable {
             return "Acute leukocytosis, high systemic inflammatory markers, cytokine storm potential, and hypermetabolic state."
         case .platelets:
             return "Spontaneous intravascular aggregation, hypercoagulability, and risk of deep vein thrombosis or stroke."
+        case .glucose:
+            return "Hyperosmolar plasma drag, hemoglobin glycation (HbA1c), endothelial oxidative stress, and long-term microvascular damage."
         }
     }
 }
@@ -245,6 +272,7 @@ struct PatientPreset: Identifiable, Equatable {
     let rbc: Double
     let wbc: Double
     let plt: Double
+    let glucose: Double
     let clinicalSummary: String
     let visualClues: String
     let conditionName: String
@@ -253,7 +281,6 @@ struct PatientPreset: Identifiable, Equatable {
         lhs.id == rhs.id
     }
     
-    // Presets configured according to Section 6 of SDD
     static let presets: [PatientPreset] = [
         PatientPreset(
             caseNumber: "Baseline",
@@ -262,8 +289,9 @@ struct PatientPreset: Identifiable, Equatable {
             rbc: 5.0,
             wbc: 7500.0,
             plt: 280000.0,
-            clinicalSummary: "Optimal cellular balance. Tissue perfusion is uninterrupted, immune defenses are standing by in peace, and primary hemostasis is balanced.",
-            visualClues: "Smooth laminar red flow, steady vessel luminosity, gentle leukocyte rolling, and isolated golden platelets.",
+            glucose: 86.0,
+            clinicalSummary: "Optimal cellular and metabolic balance. Tissue perfusion is uninterrupted, glycemia is tightly regulated, and immune defenses stand ready.",
+            visualClues: "Smooth laminar red flow, steady vessel luminosity, calm organs, and zero glucose crystal buildup.",
             conditionName: "Physiological Homeostasis"
         ),
         PatientPreset(
@@ -273,8 +301,9 @@ struct PatientPreset: Identifiable, Equatable {
             rbc: 2.8,
             wbc: 6500.0,
             plt: 250000.0,
-            clinicalSummary: "Depleted iron reserves limit heme synthesis, plummeting erythrocyte count. The cardiovascular system exhibits compensatory tachycardia to overcome poor arterial oxygen content (CaO2).",
-            visualClues: "Noticeably sparse red discs, pale desaturated vessel lumen, and rapid compensatory fluid dynamics.",
+            glucose: 88.0,
+            clinicalSummary: "Depleted iron reserves limit hemoglobin synthesis, plummeting erythrocyte count and forcing compensatory tachycardia.",
+            visualClues: "Sparse red discs, pale desaturated lumen, and pulsing Brain/Lungs hypoxia alert in the 3D Body.",
             conditionName: "Anemia (Erythropenia)"
         ),
         PatientPreset(
@@ -284,31 +313,46 @@ struct PatientPreset: Identifiable, Equatable {
             rbc: 4.8,
             wbc: 19500.0,
             plt: 320000.0,
-            clinicalSummary: "Pyogenic infection prompts cytokine-mediated bone marrow demargination and granulopoiesis. Leukocytes actively extravasate and release inflammatory mediators.",
-            visualClues: "Surge of spherical white leukocytes patrolling the endothelial boundary, accompanied by luminous cytokine aura particles.",
+            glucose: 112.0,
+            clinicalSummary: "Pyogenic infection triggers cytokine-mediated bone marrow mobilization alongside mild stress hyperglycemia.",
+            visualClues: "Surge of white leukocytes with soft glowing cytokine particles; glowing Bone Marrow in 3D Body.",
             conditionName: "Leukocytosis (Active Infection)"
         ),
         PatientPreset(
             caseNumber: "Case 3",
             title: "Coagulation Disorder",
-            subtitle: "Thrombocytosis & hypercoagulability risk",
+            subtitle: "Thrombocytosis & hypercoagulability",
             rbc: 5.1,
             wbc: 8000.0,
             plt: 560000.0,
-            clinicalSummary: "Elevated thrombocyte proliferation creates extreme vascular collision rates, triggering primary platelet aggregation and spontaneous microthrombi formation.",
-            visualClues: "Dense swarms of golden platelet fragments sticking together in clusters, anchoring fibrin mesh strands.",
+            glucose: 94.0,
+            clinicalSummary: "Excessive thrombocyte proliferation accelerates vascular collisions, triggering spontaneous platelet aggregation and fibrin cross-linking.",
+            visualClues: "Dense golden platelet clusters anchored by fibrin strands; Heart & Brain clotting alerts.",
             conditionName: "Thrombocytosis (Clotting Risk)"
         ),
         PatientPreset(
             caseNumber: "Case 4",
-            title: "Dengue Hemorrhagic Risk",
-            subtitle: "Severe thrombocytopenia & leukopenia",
-            rbc: 4.6,
-            wbc: 3400.0,
-            plt: 65000.0,
-            clinicalSummary: "Bone marrow suppression and immune-mediated destruction lead to profound thrombocytopenia and mild leukopenia, carrying severe hemorrhagic vulnerability.",
-            visualClues: "Virtually no visible platelets in the stream, accompanied by diminished white immune cells.",
-            conditionName: "Thrombocytopenia (Bleeding Risk)"
+            title: "Uncontrolled Diabetes Risk",
+            subtitle: "Hyperglycemia & endothelial glycation",
+            rbc: 4.9,
+            wbc: 10200.0,
+            plt: 440000.0,
+            glucose: 265.0,
+            clinicalSummary: "Persistent insulin resistance spikes plasma glucose above 250 mg/dL, driving hyperosmolar drag, HbA1c glycation, and oxidative vascular stress.",
+            visualClues: "Translucent glucose crystals flooding plasma, darkened endothelium, and sluggish blood flow.",
+            conditionName: "Hyperglycemia (Diabetes Risk)"
+        ),
+        PatientPreset(
+            caseNumber: "Case 5",
+            title: "Pancytopenia (Marrow Failure)",
+            subtitle: "Tri-lineage suppression",
+            rbc: 2.7,
+            wbc: 2100.0,
+            plt: 75000.0,
+            glucose: 84.0,
+            clinicalSummary: "Simultaneous depression of erythrocytes, leukocytes, and platelets indicating severe bone marrow aplasia or toxic suppression.",
+            visualClues: "Depleted bloodstream across all 3 cell lineages and dimmed/alert Bone Marrow in Macro View.",
+            conditionName: "Pancytopenia (Marrow Suppression)"
         )
     ]
 }

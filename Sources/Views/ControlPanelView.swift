@@ -1,22 +1,27 @@
 import SwiftUI
 
 // MARK: - Control Panel View
-/// Interactive dashboard containing real-time sliders with visual reference zones,
-/// clinical patient presets, and the "Restore Homeostasis" emergency challenge.
+/// Interactive dashboard containing all 4 real-time biomarker sliders (RBC, WBC, PLT, Glucose)
+/// with visual reference zones, clinical patient presets, and the "Restore Homeostasis" challenge.
 struct ControlPanelView: View {
     @ObservedObject var viewModel: LabViewModel
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 // 1. Header & Quick Actions
                 headerBar
                 
-                // 2. Restore Homeostasis Challenge Widget (SDD Section 6)
+                // 2. Restore Homeostasis Challenge Widget
                 challengeSection
                 
-                // 3. Real-Time Hematology Sliders
-                VStack(spacing: 14) {
+                // 3. Macro Body Quick Organ Selector (visible in Macro View)
+                if viewModel.sceneViewMode == .macroBody {
+                    macroOrganQuickBar
+                }
+                
+                // 4. Real-Time Hematology & Glycemia Sliders
+                VStack(spacing: 12) {
                     BloodParameterSliderRow(
                         cellType: .erythrocytes,
                         value: rbcBinding,
@@ -43,12 +48,21 @@ struct ControlPanelView: View {
                         onStep: { inc in viewModel.stepParameter(.platelets, increment: inc) },
                         onInspect: { toggleInspect(.platelets) }
                     )
+                    
+                    BloodParameterSliderRow(
+                        cellType: .glucose,
+                        value: glucoseBinding,
+                        status: viewModel.glucoseStatus,
+                        accentColor: .mint,
+                        onStep: { inc in viewModel.stepParameter(.glucose, increment: inc) },
+                        onInspect: { toggleInspect(.glucose) }
+                    )
                 }
                 
-                // 4. Pre-configured Clinical Patient Cases
+                // 5. Pre-configured Clinical Patient Cases
                 patientCasesSection
             }
-            .padding(18)
+            .padding(16)
         }
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -65,6 +79,7 @@ struct ControlPanelView: View {
             get: { viewModel.rbcCount },
             set: { newValue in
                 viewModel.selectedPreset = nil
+                viewModel.activeWatchProfile = nil
                 viewModel.rbcCount = newValue
             }
         )
@@ -75,6 +90,7 @@ struct ControlPanelView: View {
             get: { viewModel.wbcCount },
             set: { newValue in
                 viewModel.selectedPreset = nil
+                viewModel.activeWatchProfile = nil
                 viewModel.wbcCount = newValue
             }
         )
@@ -85,7 +101,19 @@ struct ControlPanelView: View {
             get: { viewModel.pltCount },
             set: { newValue in
                 viewModel.selectedPreset = nil
+                viewModel.activeWatchProfile = nil
                 viewModel.pltCount = newValue
+            }
+        )
+    }
+    
+    private var glucoseBinding: Binding<Double> {
+        Binding(
+            get: { viewModel.glucoseLevel },
+            set: { newValue in
+                viewModel.selectedPreset = nil
+                viewModel.activeWatchProfile = nil
+                viewModel.glucoseLevel = newValue
             }
         )
     }
@@ -94,9 +122,9 @@ struct ControlPanelView: View {
     private var headerBar: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("HEMATOLOGY LAB")
+                Text("HEMATOLOGY & METABOLIC LAB")
                     .font(.caption2.weight(.heavy))
-                    .tracking(1.2)
+                    .tracking(1.1)
                     .foregroundStyle(.secondary)
                 
                 Text("Blood Parameters")
@@ -106,7 +134,6 @@ struct ControlPanelView: View {
             
             Spacer()
             
-            // Play / Pause Simulation
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     viewModel.isSimulationPaused.toggle()
@@ -114,25 +141,60 @@ struct ControlPanelView: View {
             } label: {
                 Image(systemName: viewModel.isSimulationPaused ? "play.fill" : "pause.fill")
                     .font(.subheadline.weight(.semibold))
-                    .frame(width: 34, height: 34)
+                    .frame(width: 32, height: 32)
                     .background(Color.white.opacity(0.12))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(viewModel.isSimulationPaused ? "Resume flow" : "Pause flow")
+            .accessibilityLabel(viewModel.isSimulationPaused ? "Resume simulation" : "Pause simulation")
             
-            // Reset to Baseline
             Button {
                 viewModel.resetToHomeostasis()
             } label: {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.subheadline.weight(.semibold))
-                    .frame(width: 34, height: 34)
+                    .frame(width: 32, height: 32)
                     .background(Color.white.opacity(0.12))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Reset to Homeostasis")
+        }
+    }
+    
+    // MARK: - Macro Organ Quick Bar
+    private var macroOrganQuickBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("INSPECT TARGET ORGAN")
+                .font(.system(size: 10, weight: .heavy))
+                .tracking(1.0)
+                .foregroundStyle(.cyan)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(TargetOrgan.allCases) { organ in
+                        let isSelected = viewModel.selectedOrgan == organ
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                viewModel.selectedOrgan = isSelected ? nil : organ
+                            }
+                        } label: {
+                            Label(organ.rawValue, systemImage: organ.iconName)
+                                .font(.caption2.weight(.bold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(isSelected ? Color.cyan.opacity(0.35) : Color.white.opacity(0.08))
+                                .foregroundStyle(isSelected ? .white : .secondary)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(isSelected ? Color.cyan : Color.clear, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
     
@@ -153,7 +215,6 @@ struct ControlPanelView: View {
                         .foregroundStyle(viewModel.isHomeostasis ? .green : .orange)
                 }
                 
-                // Live Progress Gauge
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
@@ -174,7 +235,7 @@ struct ControlPanelView: View {
                 .frame(height: 8)
                 
                 HStack {
-                    Text("Align all 3 sliders into the green target ranges.")
+                    Text("Align all 4 sliders into the green target ranges.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     
@@ -207,7 +268,7 @@ struct ControlPanelView: View {
                         Text("Restore Homeostasis Challenge")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(.white)
-                        Text("Stabilize a critical patient case in real time")
+                        Text("Stabilize a critical multi-system patient")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.85))
                     }
@@ -219,7 +280,7 @@ struct ControlPanelView: View {
                         .foregroundStyle(.white.opacity(0.8))
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.vertical, 11)
                 .background(
                     LinearGradient(
                         colors: [Color.red.opacity(0.85), Color.orange.opacity(0.85)],
@@ -236,19 +297,17 @@ struct ControlPanelView: View {
     
     // MARK: - Patient Presets Section
     private var patientCasesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("CLINICAL PATIENT CASES")
                 .font(.caption2.weight(.heavy))
                 .tracking(1.1)
                 .foregroundStyle(.secondary)
             
-            VStack(spacing: 8) {
+            VStack(spacing: 7) {
                 ForEach(PatientPreset.presets) { preset in
                     let isSelected = viewModel.selectedPreset == preset
                     
                     Button {
-                        viewModel.isChallengeModeActive = false
-                        viewModel.challengeCompleted = false
                         viewModel.applyPreset(preset)
                     } label: {
                         HStack(spacing: 10) {
@@ -279,7 +338,7 @@ struct ControlPanelView: View {
                             }
                         }
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 9)
                         .background(isSelected ? Color.white.opacity(0.14) : Color.white.opacity(0.06))
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
@@ -295,6 +354,7 @@ struct ControlPanelView: View {
     
     private func toggleInspect(_ cell: BloodCellType) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            viewModel.sceneViewMode = .microVein
             if viewModel.selectedCellType == cell {
                 viewModel.selectedCellType = nil
             } else {
@@ -314,24 +374,22 @@ struct BloodParameterSliderRow: View {
     let onInspect: () -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Top Row: Icon + Name + Value + Status
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Image(systemName: cellType.iconName)
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(accentColor)
                     .frame(width: 24, height: 24)
                     .background(accentColor.opacity(0.16))
                     .clipShape(Circle())
                 
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 4) {
-                        Text(cellType.shortName)
-                            .font(.subheadline.weight(.bold))
-                        Text("(\(cellType.scientificName))")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack(spacing: 4) {
+                    Text(cellType.shortName)
+                        .font(.subheadline.weight(.bold))
+                    Text("(\(cellType.scientificName))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
                 
                 Button {
@@ -346,19 +404,16 @@ struct BloodParameterSliderRow: View {
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text(cellType.formattedValue(value))
-                            .font(.subheadline.weight(.heavy).monospacedDigit())
-                            .foregroundStyle(status.color)
-                        Text(cellType.unit)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(cellType.formattedValue(value))
+                        .font(.subheadline.weight(.heavy).monospacedDigit())
+                        .foregroundStyle(status.color)
+                    Text(cellType.unit)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
             
-            // Slider + Stepper Controls
             HStack(spacing: 8) {
                 Button {
                     onStep(false)
@@ -377,7 +432,6 @@ struct BloodParameterSliderRow: View {
                     )
                     .tint(status.color)
                     
-                    // Visual Normal Zone Bar (Shows target homeostasis zone proportionally)
                     GeometryReader { geo in
                         let lowerNorm = cellType.normalizedValue(cellType.normalRange.lowerBound)
                         let upperNorm = cellType.normalizedValue(cellType.normalRange.upperBound)
@@ -408,7 +462,6 @@ struct BloodParameterSliderRow: View {
                 .buttonStyle(.plain)
             }
             
-            // Footer Reference & Status Badge
             HStack {
                 Text("Normal Ref: \(cellType.formattedValue(cellType.normalRange.lowerBound)) – \(cellType.formattedValue(cellType.normalRange.upperBound)) \(cellType.unit)")
                     .font(.system(size: 10, weight: .medium))
@@ -425,7 +478,7 @@ struct BloodParameterSliderRow: View {
                     .clipShape(Capsule())
             }
         }
-        .padding(12)
+        .padding(11)
         .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
@@ -434,4 +487,3 @@ struct BloodParameterSliderRow: View {
         )
     }
 }
-

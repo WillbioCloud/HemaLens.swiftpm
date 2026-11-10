@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Diagnostic Card View
 /// Dynamic glassmorphic HUD card explaining real-time blood physiology,
-/// clinical diagnosis, hemodynamic vitals, and interactive cell inspection.
+/// categorized system symptoms, hemodynamic vitals, and cell/organ inspection.
 struct DiagnosticCardView: View {
     @ObservedObject var viewModel: LabViewModel
     @State private var selectedTab: DiagnosticTab = .overview
@@ -10,7 +10,8 @@ struct DiagnosticCardView: View {
     @State private var heartBeatPulse: Bool = false
     
     enum DiagnosticTab: String, CaseIterable, Identifiable {
-        case overview = "Patient View"
+        case overview = "Patient"
+        case symptoms = "Symptoms"
         case biomedical = "Biomedical"
         case visualClues = "3D Clues"
         
@@ -22,24 +23,32 @@ struct DiagnosticCardView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 1. Optional Cell Inspector Banner (if user tapped a cell in 3D or slider info)
-            if let inspectedCell = viewModel.selectedCellType {
+        VStack(alignment: .leading, spacing: 10) {
+            // 1. Optional Cell Inspector Banner (Micro View tap)
+            if let inspectedCell = viewModel.selectedCellType,
+               viewModel.sceneViewMode == .microVein {
                 cellInspectorCard(for: inspectedCell)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             
-            // 2. Main Clinical Diagnosis Card
-            VStack(alignment: .leading, spacing: 12) {
-                // Header Row: Condition Status + Severity Badge + Collapse Toggle
+            // 2. Optional Organ Impact Inspector Banner (Macro View tap)
+            if let inspectedOrgan = viewModel.selectedOrgan,
+               viewModel.sceneViewMode == .macroBody {
+                organInspectorCard(for: inspectedOrgan)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            
+            // 3. Main Clinical Diagnosis Card
+            VStack(alignment: .leading, spacing: 10) {
+                // Header Row
                 HStack(alignment: .center, spacing: 10) {
                     ZStack {
                         Circle()
                             .fill(condition.severityColor.opacity(0.22))
-                            .frame(width: 40, height: 40)
+                            .frame(width: 38, height: 38)
                         
                         Image(systemName: condition.statusIcon)
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(condition.severityColor)
                     }
                     
@@ -62,6 +71,7 @@ struct DiagnosticCardView: View {
                         Text(condition.displayName)
                             .font(.headline.weight(.bold))
                             .foregroundStyle(.primary)
+                            .lineLimit(1)
                     }
                     
                     Spacer()
@@ -79,14 +89,22 @@ struct DiagnosticCardView: View {
                     .accessibilityLabel(isExpanded ? "Collapse diagnostic details" : "Expand diagnostic details")
                 }
                 
-                // Hemodynamic Vitals Strip
-                HStack(spacing: 8) {
+                // Hemodynamic & Metabolic Vitals Strip
+                HStack(spacing: 6) {
                     vitalPill(
                         icon: "heart.fill",
                         iconColor: .red,
                         label: "Pulse",
                         value: "\(viewModel.heartRateBPM) BPM",
                         pulsing: true
+                    )
+                    
+                    vitalPill(
+                        icon: "lungs.fill",
+                        iconColor: .cyan,
+                        label: "SpO2",
+                        value: "\(viewModel.estimatedSpO2)%",
+                        pulsing: false
                     )
                     
                     vitalPill(
@@ -98,10 +116,10 @@ struct DiagnosticCardView: View {
                     )
                     
                     vitalPill(
-                        icon: "figure.stand",
-                        iconColor: condition.severityColor,
-                        label: "Target",
-                        value: condition.primaryOrganAtRisk.components(separatedBy: " (").first ?? "Systemic",
+                        icon: "cube.fill",
+                        iconColor: .mint,
+                        label: "Est. HbA1c",
+                        value: String(format: "%.1f%%", viewModel.estimatedHbA1c),
                         pulsing: false
                     )
                 }
@@ -110,7 +128,6 @@ struct DiagnosticCardView: View {
                     Divider()
                         .overlay(Color.white.opacity(0.15))
                     
-                    // Segmented Tab Picker
                     Picker("Detail View", selection: $selectedTab) {
                         ForEach(DiagnosticTab.allCases) { tab in
                             Text(tab.rawValue).tag(tab)
@@ -118,89 +135,152 @@ struct DiagnosticCardView: View {
                     }
                     .pickerStyle(.segmented)
                     
-                    // Tab Content
-                    Group {
-                        switch selectedTab {
-                        case .overview:
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(condition.laypersonExplanation)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.primary.opacity(0.95))
-                                    .fixedSize(horizontal: false, vertical: true)
+                    ScrollView(.vertical, showsIndicators: false) {
+                        Group {
+                            switch selectedTab {
+                            case .overview:
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(condition.laypersonExplanation)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary.opacity(0.95))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Image(systemName: "stethoscope")
+                                            .font(.caption)
+                                            .foregroundStyle(condition.severityColor)
+                                            .padding(.top, 2)
+                                        Text(condition.clinicalAction)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
                                 
-                                HStack(alignment: .top, spacing: 6) {
-                                    Image(systemName: "stethoscope")
+                            case .symptoms:
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(condition.symptomsBySystem) { group in
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Label {
+                                                Text(group.system.rawValue)
+                                                    .font(.caption.weight(.bold))
+                                                    .foregroundStyle(group.system.color)
+                                            } icon: {
+                                                Image(systemName: group.system.iconName)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(group.system.color)
+                                            }
+                                            
+                                            ForEach(group.symptoms, id: \.self) { symptom in
+                                                HStack(alignment: .top, spacing: 6) {
+                                                    Text("•")
+                                                        .font(.caption.weight(.bold))
+                                                        .foregroundStyle(group.system.color)
+                                                    Text(symptom)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.primary.opacity(0.92))
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                }
+                                            }
+                                        }
+                                        .padding(8)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Color.white.opacity(0.05))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    }
+                                }
+                                
+                            case .biomedical:
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label {
+                                        Text("Pathophysiology")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.secondary)
+                                    } icon: {
+                                        Image(systemName: "waveform.path.ecg")
+                                            .font(.caption)
+                                            .foregroundStyle(.cyan)
+                                    }
+                                    
+                                    Text(condition.biomedicalNote)
                                         .font(.caption)
-                                        .foregroundStyle(condition.severityColor)
-                                        .padding(.top, 2)
-                                    Text(condition.clinicalAction)
+                                        .foregroundStyle(.primary.opacity(0.95))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    
+                                    Label {
+                                        Text("Hemodynamic Impact")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.secondary)
+                                    } icon: {
+                                        Image(systemName: "heart.text.square.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(condition.severityColor)
+                                    }
+                                    .padding(.top, 2)
+                                    
+                                    Text(condition.cardiovascularImpact)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            }
-                            
-                        case .biomedical:
-                            VStack(alignment: .leading, spacing: 8) {
-                                Label {
-                                    Text("Pathophysiology")
+                                
+                            case .visualClues:
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Observe in 3D Scene:")
                                         .font(.caption.weight(.bold))
                                         .foregroundStyle(.secondary)
-                                } icon: {
-                                    Image(systemName: "waveform.path.ecg")
-                                        .font(.caption)
-                                        .foregroundStyle(.cyan)
-                                }
-                                
-                                Text(condition.biomedicalNote)
-                                    .font(.caption)
-                                    .foregroundStyle(.primary.opacity(0.95))
-                                    .fixedSize(horizontal: false, vertical: true)
-                                
-                                Label {
-                                    Text("Hemodynamic Impact")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.secondary)
-                                } icon: {
-                                    Image(systemName: "heart.text.square.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(condition.severityColor)
-                                }
-                                .padding(.top, 2)
-                                
-                                Text(condition.cardiovascularImpact)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            
-                        case .visualClues:
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Observe Inside the 3D Vessel:")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.secondary)
-                                
-                                ForEach(condition.visual3DClues, id: \.self) { clue in
-                                    HStack(alignment: .center, spacing: 8) {
-                                        Image(systemName: "eye.fill")
-                                            .font(.caption2)
-                                            .foregroundStyle(condition.severityColor)
-                                        Text(clue)
-                                            .font(.caption)
-                                            .foregroundStyle(.primary.opacity(0.92))
+                                    
+                                    ForEach(condition.visual3DClues, id: \.self) { clue in
+                                        HStack(alignment: .center, spacing: 8) {
+                                            Image(systemName: "eye.fill")
+                                                .font(.caption2)
+                                                .foregroundStyle(condition.severityColor)
+                                            Text(clue)
+                                                .font(.caption)
+                                                .foregroundStyle(.primary.opacity(0.92))
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }
+                                    
+                                    if viewModel.sceneViewMode == .macroBody {
+                                        Divider().overlay(Color.white.opacity(0.1))
+                                        Text("Tap any glowing organ in the 3D Human Body (or pick below):")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                        
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: 6) {
+                                                ForEach(TargetOrgan.allCases) { organ in
+                                                    Button {
+                                                        withAnimation(.spring()) {
+                                                            viewModel.selectedOrgan = organ
+                                                        }
+                                                    } label: {
+                                                        Label(organ.rawValue, systemImage: organ.iconName)
+                                                            .font(.caption2.weight(.semibold))
+                                                            .padding(.horizontal, 8)
+                                                            .padding(.vertical, 5)
+                                                            .background(viewModel.selectedOrgan == organ ? Color.cyan.opacity(0.3) : Color.white.opacity(0.1))
+                                                            .clipShape(Capsule())
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    .frame(maxHeight: 195)
                     .transition(.opacity)
                 }
             }
-            .padding(16)
+            .padding(14)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
@@ -219,11 +299,11 @@ struct DiagnosticCardView: View {
     // MARK: - Cell Inspector Sub-card
     @ViewBuilder
     private func cellInspectorCard(for cell: BloodCellType) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: cell.iconName)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(cellColor(for: cell))
+                    .foregroundStyle(cell.themeColor)
                 
                 Text("\(cell.commonName) (\(cell.scientificName))")
                     .font(.subheadline.weight(.bold))
@@ -258,42 +338,85 @@ struct DiagnosticCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(cellColor(for: cell).opacity(0.5), lineWidth: 1)
+                .strokeBorder(cell.themeColor.opacity(0.5), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Organ Impact Inspector Sub-card
+    @ViewBuilder
+    private func organInspectorCard(for organ: TargetOrgan) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: organ.iconName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.cyan)
+                
+                Text("Organ Impact: \(organ.rawValue)")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Button {
+                    withAnimation(.spring()) {
+                        viewModel.selectedOrgan = nil
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            Text(organ.impactDescription(
+                for: condition,
+                rbc: viewModel.rbcCount,
+                wbc: viewModel.wbcCount,
+                plt: viewModel.pltCount,
+                glucose: viewModel.glucoseLevel
+            ))
+            .font(.caption)
+            .foregroundStyle(.primary.opacity(0.94))
+            .fixedSize(horizontal: false, vertical: true)
+            
+            Text(organ.physiologicalRole)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.cyan.opacity(0.55), lineWidth: 1.2)
         )
     }
     
     // MARK: - Hemodynamic Vital Pill
     @ViewBuilder
     private func vitalPill(icon: String, iconColor: Color, label: String, value: String, pulsing: Bool) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.caption2)
+                .font(.system(size: 10))
                 .foregroundStyle(iconColor)
                 .scaleEffect(pulsing && heartBeatPulse ? 1.22 : 1.0)
             
             VStack(alignment: .leading, spacing: 0) {
                 Text(label)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: 8.5, weight: .medium))
                     .foregroundStyle(.secondary)
                 Text(value)
-                    .font(.caption2.weight(.bold).monospacedDigit())
+                    .font(.system(size: 10.5, weight: .bold).monospacedDigit())
                     .foregroundStyle(.primary)
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.07))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
-    
-    private func cellColor(for cell: BloodCellType) -> Color {
-        switch cell {
-        case .erythrocytes: return .red
-        case .leukocytes: return .cyan
-        case .platelets: return .yellow
-        }
-    }
 }
-

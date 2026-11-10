@@ -98,6 +98,16 @@ struct BloodVesselSceneViewRepresentable: UIViewRepresentable {
                         viewModel.selectedCellType = .platelets
                     }
                     return
+                case "GLU":
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.selectedCellType = .glucose
+                    }
+                    return
+                case "GLU":
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.selectedCellType = .glucose
+                    }
+                    return
                 default:
                     continue
                 }
@@ -180,6 +190,16 @@ struct BloodVesselSceneViewRepresentableMac: NSViewRepresentable {
                 case "PLT":
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         viewModel.selectedCellType = .platelets
+                    }
+                    return
+                case "GLU":
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.selectedCellType = .glucose
+                    }
+                    return
+                case "GLU":
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.selectedCellType = .glucose
                     }
                     return
                 default:
