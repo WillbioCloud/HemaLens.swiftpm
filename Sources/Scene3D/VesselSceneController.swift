@@ -249,7 +249,7 @@ final class VesselSceneController: NSObject, SCNSceneRendererDelegate {
         scene.rootNode.addChildNode(directionalLightNode)
         
         let pointLight = SCNLight()
-        pointLight.type = .point
+        pointLight.type = .omni
         pointLight.color = PlatformColor(red: 0.95, green: 0.25, blue: 0.20, alpha: 1.0)
         pointLight.intensity = 720.0
         pointLight.attenuationStartDistance = 2.0
